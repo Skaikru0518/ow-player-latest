@@ -1,4 +1,4 @@
-import { app as electronApp } from 'electron';
+import { app as electronApp, ipcMain } from 'electron';
 import { overwolf } from '@overwolf/ow-electron'; // TODO: wil be @overwolf/ow-electron
 import {
   IOverwolfOverlayApi,
@@ -33,7 +33,7 @@ export class OverlayService extends EventEmitter {
    *
    */
   public async createNewOsrWindow(
-    options: OverlayWindowOptions
+    options: OverlayWindowOptions,
   ): Promise<OverlayBrowserWindow> {
     const overlay = await this.overlayApi.createWindow(options);
     return overlay;

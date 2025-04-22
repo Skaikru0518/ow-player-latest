@@ -2,10 +2,14 @@ import { app as electronApp, ipcMain, BrowserWindow } from 'electron';
 import { GameEventsService } from '../services/gep.service';
 import path from 'path';
 import { DemoOSRWindowController } from './demo-osr-window.controller';
+import { OSRWindowContoller } from './osr-window-controller';
 import { OverlayService } from '../services/overlay.service';
 import { overwolf } from '@overwolf/ow-electron';
 import { OverlayHotkeysService } from '../services/overlay-hotkeys.service';
-import { ExclusiveHotKeyMode, OverlayInputService } from '../services/overlay-input.service';
+import {
+  ExclusiveHotKeyMode,
+  OverlayInputService,
+} from '../services/overlay-input.service';
 
 const owElectronApp = electronApp as overwolf.OverwolfApp;
 
@@ -14,6 +18,7 @@ const owElectronApp = electronApp as overwolf.OverwolfApp;
  */
 export class MainWindowController {
   private browserWindow: BrowserWindow = null;
+  private osrController: OSRWindowContoller = null;
 
   /**
    *
@@ -21,9 +26,9 @@ export class MainWindowController {
   constructor(
     private readonly gepService: GameEventsService,
     private readonly overlayService: OverlayService,
-    private readonly createDemoOsrWinController: () => DemoOSRWindowController,
+    private readonly createOSRWindowController: () => OSRWindowContoller,
     private readonly overlayHotkeysService: OverlayHotkeysService,
-    private readonly overlayInputService: OverlayInputService
+    private readonly overlayInputService: OverlayInputService,
   ) {
     this.registerToIpc();
 
@@ -42,7 +47,7 @@ export class MainWindowController {
 
     owElectronApp.overwolf.packages.on(
       'failed-to-initialize',
-      this.logPackageManagerErrors.bind(this)
+      this.logPackageManagerErrors.bind(this),
     );
   }
 
@@ -61,7 +66,7 @@ export class MainWindowController {
     this.printLogMessage(
       'Overwolf Package Manager error!',
       packageName,
-      ...args
+      ...args,
     );
   }
 
@@ -92,7 +97,12 @@ export class MainWindowController {
    *
    */
   private registerToIpc() {
-    ipcMain.handle('createOSR', async () => await this.createOSRDemoWindow());
+    // ipcMain.handle(
+    //   'createDemoOSR',
+    //   async () => await this.createOSRDemoWindow(),
+    // );
+
+    ipcMain.handle('createOSR', async () => await this.createOSRWindow());
 
     ipcMain.handle('gep-set-required-feature', async () => {
       await this.gepService.setRequiredFeaturesForAllSupportedGames();
@@ -103,10 +113,32 @@ export class MainWindowController {
       return await this.gepService.getInfoForActiveGame();
     });
 
+    // ipcMain.handle('toggleOSRVisibility', async () => {
+    //   this.overlayService?.overlayApi?.getAllWindows().forEach((window) => {
+    //     // Make sure it's your overlay window
+    //     if (window.window.isVisible()) {
+    //       window.window.hide();
+    //     } else {
+    //       window.window.show();
+    //     }
+    //   });
+    // });
+
     ipcMain.handle('toggleOSRVisibility', async () => {
-      this.overlayService?.overlayApi?.getAllWindows().forEach(e => {
-        e.window.show();
-      })
+      const windows = this.overlayService?.overlayApi?.getAllWindows();
+      if (!windows || windows.length === 0) return;
+
+      // Check if any window is visible
+      const isAnyVisible = windows.some((window) => window.window.isVisible());
+
+      // Apply the same action to all windows
+      windows.forEach((window) => {
+        if (isAnyVisible) {
+          window.window.hide();
+        } else {
+          window.window.show();
+        }
+      });
     });
 
     ipcMain.handle('updateHotkey', async () => {
@@ -142,20 +174,30 @@ export class MainWindowController {
         this.overlayInputService.mode = ExclusiveHotKeyMode.AutoRelease;
       }
     });
-
   }
 
   /**
    *
    */
-  private async createOSRDemoWindow(): Promise<void> {
-    const controller = this.createDemoOsrWinController();
+  // private async createOSRDemoWindow(): Promise<void> {
+  //   const controller = this.createDemoOsrWinController();
 
+  //   const showDevTools = true;
+  //   await controller.createAndShow(showDevTools);
+
+  //   controller.overlayBrowserWindow.window.on('closed', () => {
+  //     this.printLogMessage('osr window closed');
+  //   });
+  // }
+
+  private async createOSRWindow(): Promise<void> {
+    const controller = this.createOSRWindowController();
     const showDevTools = true;
+    this.printLogMessage('osr created');
     await controller.createAndShow(showDevTools);
-
     controller.overlayBrowserWindow.window.on('closed', () => {
-      this.printLogMessage('osr window closed');
+      this.osrController = null;
+      this.printLogMessage('osr closed');
     });
   }
 }

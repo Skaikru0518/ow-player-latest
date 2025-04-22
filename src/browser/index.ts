@@ -1,11 +1,11 @@
-import {app as ElectronApp } from 'electron';
-import { Application } from "./application";
+import { app as ElectronApp } from 'electron';
+import { Application } from './application';
 import { OverlayHotkeysService } from './services/overlay-hotkeys.service';
 import { OverlayService } from './services/overlay.service';
 import { GameEventsService } from './services/gep.service';
 import { MainWindowController } from './controllers/main-window.controller';
-import { DemoOSRWindowController } from './controllers/demo-osr-window.controller';
 import { OverlayInputService } from './services/overlay-input.service';
+import { OSRWindowContoller } from './controllers/osr-window-controller';
 
 /**
  * TODO: Integrate your own dependency-injection library
@@ -16,21 +16,21 @@ const bootstrap = (): Application => {
   const gepService = new GameEventsService();
   const inputService = new OverlayInputService(overlayService);
 
-  const createDemoOsrWindowControllerFactory = (): DemoOSRWindowController => {
-    const controller = new DemoOSRWindowController(overlayService);
+  const createOsrWindowControllerFactory = (): OSRWindowContoller => {
+    const controller = new OSRWindowContoller(overlayService);
     return controller;
-  }
+  };
 
   const mainWindowController = new MainWindowController(
     gepService,
     overlayService,
-    createDemoOsrWindowControllerFactory,
+    createOsrWindowControllerFactory,
     overlayHotkeysService,
-    inputService
+    inputService,
   );
 
   return new Application(overlayService, gepService, mainWindowController);
-}
+};
 
 const app = bootstrap();
 

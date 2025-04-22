@@ -1,6 +1,11 @@
-import path from "path";
-import { OverlayService } from "../services/overlay.service";
-import { OverlayBrowserWindow, OverlayWindowOptions, PassthroughType, ZOrderType } from "@overwolf/ow-electron-packages-types";
+import path from 'path';
+import { OverlayService } from '../services/overlay.service';
+import {
+  OverlayBrowserWindow,
+  OverlayWindowOptions,
+  PassthroughType,
+  ZOrderType,
+} from '@overwolf/ow-electron-packages-types';
 
 /**
  *
@@ -8,19 +13,17 @@ import { OverlayBrowserWindow, OverlayWindowOptions, PassthroughType, ZOrderType
 export class DemoOSRWindowController {
   private overlayWindow: OverlayBrowserWindow = null;
 
-
   /**
    *
    */
-  public get overlayBrowserWindow() : OverlayBrowserWindow {
+  public get overlayBrowserWindow(): OverlayBrowserWindow {
     return this.overlayWindow;
   }
 
   /**
    *
    */
-  constructor(private readonly overlayService: OverlayService) {
-  }
+  constructor(private readonly overlayService: OverlayService) {}
 
   /**
    *
@@ -49,16 +52,14 @@ export class DemoOSRWindowController {
     options.x = this.randomInteger(0, screenWidth - options.width);
     options.y = 10;
 
-    this.overlayWindow = await this.overlayService.createNewOsrWindow(
-      options,
-    );
+    this.overlayWindow = await this.overlayService.createNewOsrWindow(options);
 
     this.registerToIpc();
 
     this.registerToWindowEvents();
 
     await this.overlayWindow.window.loadURL(
-      path.join(__dirname, '../renderer/osr.html')
+      path.join(__dirname, '../renderer/osr.html'),
     );
 
     this.overlayWindow.window.show();
@@ -100,13 +101,13 @@ export class DemoOSRWindowController {
 
   /**
    *
-  */
+   */
   private registerToWindowEvents() {
     const browserWindow = this.overlayWindow.window;
-    browserWindow.on('closed', () =>{
+    browserWindow.on('closed', () => {
       this.overlayWindow = null;
       console.log('osr window closed');
-    })
+    });
   }
 
   /**
@@ -132,7 +133,7 @@ export class DemoOSRWindowController {
     const window = this.overlayWindow.window;
     window?.setPosition(
       this.randomInteger(0, gameWindowInfo.size.width - 100),
-      this.randomInteger(0, gameWindowInfo.size.height - 100)
+      this.randomInteger(0, gameWindowInfo.size.height - 100),
     );
   }
 

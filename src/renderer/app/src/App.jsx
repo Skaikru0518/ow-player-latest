@@ -1,35 +1,28 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React from 'react';
 
-function App() {
-  const [count, setCount] = useState(0)
-
+const App = () => {
+  const handleCloseOsr = async (e) => {
+    await window.osr.toggle();
+  };
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="w-full h-screen bg-[#212121] text-white flex justify-center items-center mx-auto my-auto">
+      <div className="bg-blue-950 flex items-center justify-center flex-col w-[850px] h-[500px] gap-8">
+        <h1>Login</h1>
+        <input
+          type="text"
+          className="w-[90%] h-12 border rounded-2xl p-6"
+          placeholder="email"
+        />
+        <input
+          type="text"
+          className="w-[90%] h-12 border rounded-2xl p-6"
+          placeholder="password"
+        />
+        <h1>ASDOIUHASUZIGDZUVAC TSFBGD</h1>
+        <button onClick={handleCloseOsr}>Close osr</button>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
+    </div>
+  );
+};
 
-export default App
+export default App;
