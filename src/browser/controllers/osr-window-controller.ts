@@ -88,10 +88,25 @@ export class OSRWindowContoller {
     });
 
     windowIpc.on('toggle-overlay', () => {
-      if (this.overlayWindow.window.isVisible()) {
-        this.overlayWindow.window.hide();
+      const windows = this.overlayService?.overlayApi?.getAllWindows();
+      if (!windows || windows.length === 0) {
+        return;
+      }
+
+      // Find specifically our OSR window
+      const osrWindow = windows.find(
+        (window) => window.name === 'osrWindow-player',
+      );
+
+      if (!osrWindow) {
+        return;
+      }
+
+      // Toggle just this specific window
+      if (osrWindow.window.isVisible()) {
+        osrWindow.window.hide();
       } else {
-        this.overlayWindow.window.show();
+        osrWindow.window.show();
       }
     });
   }
