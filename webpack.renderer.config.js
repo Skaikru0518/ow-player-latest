@@ -2,7 +2,6 @@
 const config = require('./webpack.base.config');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const path = require('path');
-const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 const rendererConfig = { ...config };
 rendererConfig.target = 'electron-renderer';
@@ -11,17 +10,6 @@ rendererConfig.entry = {
   preload: './src/preload/preload.ts',
   exclusive: './src/renderer/exclusive.ts',
 };
-
-rendererConfig.plugins.push(
-  new CopyWebpackPlugin({
-    patterns: [
-      {
-        from: path.resolve(__dirname, 'src/renderer/app/dist'),
-        to: path.resolve(__dirname, 'dist/renderer/app/dist'),
-      },
-    ],
-  }),
-);
 
 rendererConfig.plugins.push(
   new HtmlWebpackPlugin({
@@ -38,9 +26,6 @@ rendererConfig.plugins.push(
     template: './src/renderer/osr.html',
     filename: path.join(__dirname, './dist/renderer/osr.html'),
     inject: false,
-    templateParameters: {
-      viteAssetsPath: 'app/dist/assets',
-    },
   }),
 );
 
@@ -53,4 +38,19 @@ rendererConfig.plugins.push(
   }),
 );
 
+rendererConfig.output = {
+  path: path.join(__dirname, './dist'),
+  filename: (pathData) => {
+    if (pathData.chunk.name === 'exclusive') {
+      return 'exclusive/[name].js';
+    }
+    if (pathData.chunk.name === 'renderer') {
+      return 'renderer/[name].js';
+    }
+    if (pathData.chunk.name === 'preload') {
+      return 'preload/[name].js';
+    }
+    return '[name].js';
+  },
+};
 module.exports = rendererConfig;

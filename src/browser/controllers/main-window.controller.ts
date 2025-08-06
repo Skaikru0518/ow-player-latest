@@ -1,100 +1,81 @@
 import { app as electronApp, ipcMain, BrowserWindow } from 'electron';
-import { GameEventsService } from '../services/gep.service';
+import { GameEventService } from '../services/gep.service';
 import path from 'path';
-import { DemoOSRWindowController } from './demo-osr-window.controller';
+import { OSRWindowController } from './osr-window.controller';
 import { OverlayService } from '../services/overlay.service';
 import { overwolf } from '@overwolf/ow-electron';
-import { OverlayHotkeysService } from '../services/overlay-hotkeys.service';
-import { ExclusiveHotKeyMode, OverlayInputService } from '../services/overlay-input.service';
+import { OverlayHotkeyService } from '../services/overlay-hotkey.service';
+import {
+  OverlayInputService,
+  ExclusiveHotkeyMode,
+} from '../services/overlay-input.service';
 
 const owElectronApp = electronApp as overwolf.OverwolfApp;
 
-/**
- *
- */
 export class MainWindowController {
   private browserWindow: BrowserWindow = null;
 
-  /**
-   *
-   */
   constructor(
-    private readonly gepService: GameEventsService,
+    private readonly gepService: GameEventService,
     private readonly overlayService: OverlayService,
-    private readonly createDemoOsrWinController: () => DemoOSRWindowController,
-    private readonly overlayHotkeysService: OverlayHotkeysService,
-    private readonly overlayInputService: OverlayInputService
+    private readonly createOSRWinController: () => OSRWindowController,
+    private readonly overlayHotkeyService: OverlayHotkeyService,
+    private readonly overlayInputService: OverlayInputService,
+    private osrWindowController: OSRWindowController | null = null,
   ) {
     this.registerToIpc();
 
     gepService.on('log', this.printLogMessage.bind(this));
     overlayService.on('log', this.printLogMessage.bind(this));
-
-    overlayHotkeysService.on('log', this.printLogMessage.bind(this));
+    overlayHotkeyService.on('log', this.printLogMessage.bind(this));
 
     owElectronApp.overwolf.packages.on('crashed', (e, ...args) => {
       this.printLogMessage('package crashed', ...args);
-      // ow-electron package manager crashed (will be auto relaunch)
-      // e.preventDefault();
-      // calling `e.preventDefault();` will stop the GEP Package from
-      // automatically re-launching
     });
 
     owElectronApp.overwolf.packages.on(
       'failed-to-initialize',
-      this.logPackageManagerErrors.bind(this)
+      this.logPackageManagerErrors.bind(this),
     );
   }
 
-  /**
-   *
-   */
-  public printLogMessage(message: String, ...args: any[]) {
+  private printLogMessage(message: string, ...args: any[]) {
     if (this.browserWindow?.isDestroyed() ?? true) {
       return;
     }
-    this.browserWindow?.webContents?.send('console-message', message, ...args);
+
+    this.browserWindow?.webContents.send('console-message', message, ...args);
   }
 
-  //----------------------------------------------------------------------------
   private logPackageManagerErrors(e, packageName, ...args: any[]) {
     this.printLogMessage(
-      'Overwolf Package Manager error!',
+      'Overwolf Package Manager Error',
       packageName,
-      ...args
+      ...args,
     );
   }
 
-  /**
-   *
-   */
   public createAndShow(showDevTools: boolean) {
     this.browserWindow = new BrowserWindow({
-      width: 900,
-      height: 900,
-      show: true,
+      width: 800,
+      height: 600,
+      show: false,
       webPreferences: {
-        // NOTE: nodeIntegration and contextIsolation are only required for this
-        // specific demo app, they are not a neceassry requirement for any other
-        // ow-electron applications
         nodeIntegration: true,
         contextIsolation: true,
         devTools: showDevTools,
-        // relative to root folder of the project
         preload: path.join(__dirname, '../preload/preload.js'),
       },
     });
 
+    this.browserWindow.once('ready-to-show', () => {
+      this.browserWindow.show();
+    });
     this.browserWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
 
-  /**
-   *
-   */
   private registerToIpc() {
-    ipcMain.handle('createOSR', async () => await this.createOSRDemoWindow());
-
-    ipcMain.handle('gep-set-required-feature', async () => {
+    ipcMain.handle('create-osr', async () => {
       await this.gepService.setRequiredFeaturesForAllSupportedGames();
       return true;
     });
@@ -103,21 +84,31 @@ export class MainWindowController {
       return await this.gepService.getInfoForActiveGame();
     });
 
-    ipcMain.handle('toggleOSRVisibility', async () => {
-      this.overlayService?.overlayApi?.getAllWindows().forEach(e => {
-        e.window.show();
-      })
+    ipcMain.handle('toggle-osr-visibility', async () => {
+      if (
+        this.osrWindowController &&
+        this.osrWindowController.overlayBrowserWindow
+      ) {
+        const win = this.osrWindowController.overlayBrowserWindow.window;
+        if (win.isVisible()) {
+          win.hide();
+        } else {
+          win.show();
+        }
+      } else {
+        await this.createOSRWindow();
+      }
     });
 
-    ipcMain.handle('updateHotkey', async () => {
-      this.overlayHotkeysService?.updateHotkey();
+    ipcMain.handle('update-hotkey', async (e, hotkey) => {
+      this.overlayHotkeyService?.updateHotkey(hotkey);
     });
 
-    ipcMain.handle('updateExclusiveOptions', async (sender, options) => {
+    ipcMain.handle('update-exclusive-options', async (sender, options) => {
       this.overlayInputService?.updateExclusiveModeOptions(options);
     });
 
-    ipcMain.handle('EXCLUSIVE_TYPE', async (sender, type) => {
+    ipcMain.handle('exclusive-type', async (sender, type) => {
       if (!this.overlayInputService) {
         return;
       }
@@ -125,37 +116,34 @@ export class MainWindowController {
       if (type === 'customWindow') {
         this.overlayInputService.exclusiveModeAsWindow = true;
       } else {
-        // native
         this.overlayInputService.exclusiveModeAsWindow = false;
       }
     });
 
-    ipcMain.handle('EXCLUSIVE_BEHAVIOR', async (sender, behavior) => {
+    ipcMain.handle('exclusive-behavior', async (sender, behavior) => {
       if (!this.overlayInputService) {
         return;
       }
 
       if (behavior === 'toggle') {
-        this.overlayInputService.mode = ExclusiveHotKeyMode.Toggle;
+        this.overlayInputService.mode = ExclusiveHotkeyMode.Toggle;
       } else {
-        // native
-        this.overlayInputService.mode = ExclusiveHotKeyMode.AutoRelease;
+        this.overlayInputService.mode = ExclusiveHotkeyMode.AutoRelease;
       }
     });
-
   }
 
-  /**
-   *
-   */
-  private async createOSRDemoWindow(): Promise<void> {
-    const controller = this.createDemoOsrWinController();
+  private async createOSRWindow(): Promise<void> {
+    if (!this.osrWindowController) {
+      this.osrWindowController = this.createOSRWinController();
+      await this.osrWindowController.createAndShow(true);
 
-    const showDevTools = true;
-    await controller.createAndShow(showDevTools);
-
-    controller.overlayBrowserWindow.window.on('closed', () => {
-      this.printLogMessage('osr window closed');
-    });
+      this.osrWindowController.overlayBrowserWindow.window.on('closed', () => {
+        this.printLogMessage('osr window closed');
+        this.osrWindowController = null;
+      });
+    } else {
+      this.osrWindowController.overlayBrowserWindow.window.show();
+    }
   }
 }
