@@ -6,7 +6,6 @@ module.exports = {
   devtool: 'source-map',
   module: {
     rules: [
-      // All files with a '.ts' or '.tsx' extension will be handled by 'ts-loader'.
       {
         test: /\.tsx?$/,
         use: 'ts-loader',
@@ -15,18 +14,11 @@ module.exports = {
     ],
   },
   resolve: {
-    extensions: ['.ts', '.tsx', '.json', '.js'],
+    extensions: ['.ts', '.tsx', '.json', '.js', '.jsx'],
   },
-
-  output: {
-    path: path.join(__dirname, '/dist'),
-    filename: '[name]/[name].js',
-  },
-
   plugins: [],
   externals: {
     bufferutil: 'bufferutil',
     'utf-8-validate': 'utf-8-validate',
   },
 };
-

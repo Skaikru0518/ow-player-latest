@@ -12,43 +12,40 @@ import {
   PassthroughType,
   ZOrderType,
 } from '@overwolf/ow-electron-packages-types';
+
 import path from 'path';
+import { OverlayHotkeyService } from './overlay-hotkey.service';
 
 const owElectron = app as overwolf.OverwolfApp;
 
-export enum ExclusiveHotKeyMode {
+export enum ExclusiveHotkeyMode {
   Toggle,
   AutoRelease,
 }
 
 export class OverlayInputService {
-  private exclusiveModeBackgroundWindow: OverlayBrowserWindow = null;
-
+  private exclusiveModeBGWindow: OverlayBrowserWindow = null;
   private inputOptions: ExclusiveInputOptions = {
     backgroundColor: 'rgba(12, 12, 12, 0.5)',
   };
-
   public exclusiveModeAsWindow = false;
-  public mode: ExclusiveHotKeyMode = ExclusiveHotKeyMode.Toggle;
+  public mode: ExclusiveHotkeyMode = ExclusiveHotkeyMode.Toggle;
 
-  constructor(overlayService: OverlayService) {
-    overlayService.on('ready', this.init.bind(this));
+  constructor(
+    overlayService: OverlayService,
+    hotkeyService: OverlayHotkeyService,
+  ) {
+    overlayService.on('overlay-ready', this.init.bind(this));
+    hotkeyService.on('exclusive-mode-toggle', () =>
+      this.onExclusiveModeHotkey(true),
+    );
   }
 
-  /**
-   *
-   */
-  public updateExclusiveModeOptions(options: any) {
-    this.inputOptions = {
-      fadeAnimateInterval: options?.animationDuration,
-      backgroundColor: options?.color,
-    };
+  get overlayApi(): IOverwolfOverlayApi {
+    return (owElectron.overwolf.packages as any).overlay as IOverwolfOverlayApi;
   }
 
-  /** */
   private init() {
-    this.registerExclusiveModeHotkey();
-
     this.overlayApi.on('game-injected', (gameInfo) => {
       this.onNewGameInjected(gameInfo);
     });
@@ -74,40 +71,24 @@ export class OverlayInputService {
     });
   }
 
-  private registerExclusiveModeHotkey() {
-    this.overlayApi.hotkeys.register(
-      {
-        name: 'ExclusiveMode',
-        keyCode: 9, // TAB
-        modifiers: {
-          ctrl: true,
-        },
-        passthrough: false,
-      },
-      (hotkey, state) => {
-        this.onExclusiveModeHotkey(state == 'pressed');
-      }
-    );
-  }
-
   async assureExclusiveModeWindow() {
-    if (!this.exclusiveModeAsWindow || this.exclusiveModeBackgroundWindow) {
+    if (!this.exclusiveModeAsWindow || this.exclusiveModeBGWindow) {
       return;
     }
 
     const activeGame = this.overlayApi.getActiveGameInfo();
-    const width = activeGame?.gameWindowInfo?.size.width || 500;
-    const height = activeGame?.gameWindowInfo?.size.height || 500;
+    const width = activeGame?.gameWindowInfo?.size.width || 800;
+    const heigth = activeGame?.gameWindowInfo?.size.height || 600;
 
     const options: OverlayWindowOptions = {
-      name: 'exclusiveModeBackground',
-      height: height,
+      name: 'game-overlay-window',
+      height: heigth,
       width: width,
       show: true,
       passthrough: PassthroughType.PassThrough,
       zOrder: ZOrderType.BottomMost,
       transparent: true,
-      resizable: false,
+      resizable: true,
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,
@@ -115,93 +96,54 @@ export class OverlayInputService {
       },
     };
 
-    this.exclusiveModeBackgroundWindow = await this.overlayApi.createWindow(
-      options
-    );
+    this.exclusiveModeBGWindow = await this.overlayApi.createWindow(options);
 
     this.registerToIpc();
 
-    await this.exclusiveModeBackgroundWindow.window.loadURL(
-      path.join(__dirname, '../exclusive/exclusive.html')
+    await this.exclusiveModeBGWindow.window.loadURL(
+      path.join(__dirname, '../exclusive/exclusive.html'),
     );
 
-    this.exclusiveModeBackgroundWindow.window.webContents.openDevTools({
+    this.exclusiveModeBGWindow.window.webContents.openDevTools({
       mode: 'detach',
     });
 
-    this.exclusiveModeBackgroundWindow.window.hide();
+    this.exclusiveModeBGWindow.window.hide();
   }
 
-  private registerToIpc() {
-    const windowIpc = this.exclusiveModeBackgroundWindow.window.webContents.ipc;
+  registerToIpc() {
+    const windowIpc = this.exclusiveModeBGWindow.window.webContents.ipc;
 
     windowIpc.on('HIDE_EXCLUSIVE', (e) => {
-      this.exclusiveModeBackgroundWindow.window.hide();
+      this.exclusiveModeBGWindow.window.hide();
     });
   }
 
-  onGameExclusiveModeChanged(info: GameInputInterception) {
-    if (!this.exclusiveModeBackgroundWindow) {
-      return;
-    }
-
-    if (!this.exclusiveModeAsWindow) {
-      this.exclusiveModeBackgroundWindow?.window?.hide();
-      return;
-    }
-
-    if (info.exclusiveMode == true) {
-      this.exclusiveModeBackgroundWindow.window.show();
-    }
-
-    this.exclusiveModeBackgroundWindow.window.webContents.send(
-      'EXCLUSIVE_MODE',
-      info.exclusiveMode == true
-    );
-  }
-
-  onUpdateGameWindow(window: GameWindowInfo) {
-    if (!this.exclusiveModeBackgroundWindow) {
-      return;
-    }
-
-    // keep exclusive mode background window as full screen (game size)
-    this.exclusiveModeBackgroundWindow.window.setSize(
-      window.size.width,
-      window.size.height
-    );
-  }
-
-  onNewGameInjected(gameInfo: GameInfo) {
-    //throw new Error("Method not implemented.");
-    this.assureExclusiveModeWindow();
-  }
-
-  onGameExit() {
-    this.exclusiveModeBackgroundWindow?.window?.close();
-    this.exclusiveModeBackgroundWindow = null;
+  public updateExclusiveModeOptions(options: any) {
+    this.inputOptions = {
+      fadeAnimateInterval: options?.animationDuration,
+      backgroundColor: options?.color,
+    };
   }
 
   private onExclusiveModeHotkey(pressed: boolean) {
     const inputInfo = this.overlayApi?.getActiveGameInfo()?.gameInputInfo;
-    if (!inputInfo) {
-      // not in game?
-      return;
+    if (!Gamepad) {
+      throw new Error('Not in game?');
     }
 
     switch (this.mode) {
-      case ExclusiveHotKeyMode.Toggle:
+      case ExclusiveHotkeyMode.Toggle:
         this.onHotKeyToggle(pressed, inputInfo);
         break;
-      case ExclusiveHotKeyMode.AutoRelease:
+      case ExclusiveHotkeyMode.AutoRelease:
         this.onHotKeyAutoRelease(pressed, inputInfo);
         break;
     }
   }
-
   private onHotKeyAutoRelease(
     pressed: boolean,
-    inputInfo: GameInputInterception
+    inputInfo: GameInputInterception,
   ) {
     if (!pressed) {
       this.overlayApi?.exitExclusiveMode();
@@ -235,12 +177,47 @@ export class OverlayInputService {
         backgroundColor: 'rgba(0,0,0,0)',
       });
     } else {
-      this.exclusiveModeBackgroundWindow?.window.hide();
+      this.exclusiveModeBGWindow?.window.hide();
       this.overlayApi?.enterExclusiveMode(this.inputOptions);
     }
   }
 
-  get overlayApi(): IOverwolfOverlayApi {
-    return (owElectron.overwolf.packages as any).overlay as IOverwolfOverlayApi;
+  private onNewGameInjected(gameInfo: GameInfo) {
+    this.assureExclusiveModeWindow();
+  }
+
+  private onGameExit() {
+    this.exclusiveModeBGWindow?.window?.close();
+    this.exclusiveModeBGWindow = null;
+  }
+
+  private onUpdateGameWindow(window: GameWindowInfo) {
+    if (!this.exclusiveModeBGWindow) {
+      return;
+    }
+
+    this.exclusiveModeBGWindow.window.setSize(
+      window.size.width,
+      window.size.height,
+    );
+  }
+
+  private onGameExclusiveModeChanged(info: GameInputInterception) {
+    if (!this.exclusiveModeBGWindow) {
+      return;
+    }
+
+    if (!this.exclusiveModeAsWindow) {
+      this.exclusiveModeBGWindow?.window?.hide();
+    }
+
+    if (info.exclusiveMode === true) {
+      this.exclusiveModeBGWindow.window.show();
+    }
+
+    this.exclusiveModeBGWindow.window.webContents.send(
+      'EXCLUSIVE_MODE',
+      info.exclusiveMode === true,
+    );
   }
 }

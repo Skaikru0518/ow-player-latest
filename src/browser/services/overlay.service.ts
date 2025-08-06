@@ -1,9 +1,9 @@
-import { app as electronApp, ipcMain } from 'electron';
-import { overwolf } from '@overwolf/ow-electron'; // TODO: wil be @overwolf/ow-electron
+import { app as electronApp } from 'electron';
+import { overwolf } from '@overwolf/ow-electron';
 import {
   IOverwolfOverlayApi,
-  OverlayWindowOptions,
   OverlayBrowserWindow,
+  OverlayWindowOptions,
   GamesFilter,
 } from '@overwolf/ow-electron-packages-types';
 import EventEmitter from 'events';
@@ -11,55 +11,23 @@ import EventEmitter from 'events';
 const app = electronApp as overwolf.OverwolfApp;
 
 export class OverlayService extends EventEmitter {
-  private isOverlayReady = false;
+  constructor() {
+    super();
+    this.startOverlayWhenPackageReady();
+  }
 
+  private isOverlayReady: boolean = false;
+
+  // Do not let the application access the overlay before it is ready
   public get overlayApi(): IOverwolfOverlayApi {
-    // Do not let the application access the overlay before it is ready
     if (!this.isOverlayReady) {
       return null;
     }
     return (app.overwolf.packages as any).overlay as IOverwolfOverlayApi;
   }
 
-  /**
-   *
-   */
-  constructor() {
-    super();
-    this.startOverlayWhenPackageReady();
-  }
-
-  /**
-   *
-   */
-  public async createNewOsrWindow(
-    options: OverlayWindowOptions,
-  ): Promise<OverlayBrowserWindow> {
-    const overlay = await this.overlayApi.createWindow(options);
-    return overlay;
-  }
-
-  /**
-   *
-   *
-   */
-  public async registerToGames(gameIds: number[]): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    this.log('registering to game ids:', gameIds);
-
-    const filter: GamesFilter = {
-      gamesIds: gameIds,
-    };
-
-    await this.overlayApi.registerGames(filter);
-
-    this.log('overlay is registered');
-  }
-
-  //----------------------------------------------------------------------------
-  private startOverlayWhenPackageReady() {
-    app.overwolf.packages.on('ready', (e, packageName, version) => {
+  startOverlayWhenPackageReady() {
+    app.overwolf.packages.on('ready', (event, packageName, version) => {
       if (packageName !== 'overlay') {
         return;
       }
@@ -69,74 +37,117 @@ export class OverlayService extends EventEmitter {
     });
   }
 
-  //----------------------------------------------------------------------------
+  public async createNewOsrWindow(
+    options: OverlayWindowOptions,
+  ): Promise<OverlayBrowserWindow> {
+    const overlay = await this.overlayApi.createWindow(options);
+    return overlay;
+  }
+
+  public async registerToGames(gameIds: number[]): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    this.log('[OverlayService] registering to game ids:', gameIds);
+
+    const filters: GamesFilter = {
+      gamesIds: gameIds,
+    };
+
+    await this.overlayApi.registerGames(filters);
+    this.log('[OverlayService] overlay is registered!');
+  }
+
   // must be called after package is 'ready' (i.e loaded)
   private startOverlay(version: string) {
     if (!this.overlayApi) {
-      throw new Error('Attempting to access overlay before available');
+      throw new Error('Attempting to access overlay before its ready');
     }
 
-    this.log(`overlay package is ready: ${version}`);
+    this.log(`Overlay package is ready: ${version}`);
 
     this.registerOverlayEvents();
 
-    this.emit('ready');
+    this.emit('overlay-ready', version);
   }
 
   private registerOverlayEvents() {
-    // prevent double events in case the package relaunch due crash
-    // or update.
-    //
-    // NOTE: If you have another class listening on events, this will remove
-    // their listeners as well.
+    // prevent double events in case the package relaunch due crash or update.
     this.overlayApi.removeAllListeners();
 
-    this.log('registering to overlay package events');
+    this.log('[OverlayService] registering to overlay package events');
 
     this.overlayApi.on('game-launched', (event, gameInfo) => {
-      this.log('game launched', gameInfo);
+      this.log(
+        '[OverlayService][registerOverlayEvents] game launched',
+        gameInfo,
+      );
 
       if (gameInfo.processInfo.isElevated) {
-        // ToDo: emit to log and notify user- we can't inject to elevated games
-        // if the application is not eleveted.
+        this.log(
+          '[OverlayService][registerOverlayEvents] Game is running in elevated mode. Overlay injection is not possible unless the app is also elevated',
+        );
+        this.emit('elevated-game-detected', gameInfo);
+
+        // cannot be injected so return
         return;
       }
-      // pass the decision to the application
-      this.emit('injection-decision-handling', event, gameInfo);
 
-      // or just call
-      //event.inject();
+      this.emit('injection-decision-handling', event, gameInfo);
     });
 
     this.overlayApi.on('game-injection-error', (gameInfo, error) => {
-      this.log('game-injection-error', error, gameInfo);
+      this.log(
+        '[OverlayService][registerOverlayEvents] error',
+        error,
+        gameInfo,
+      );
+      this.emit('injection-error', gameInfo, error);
     });
 
     this.overlayApi.on('game-injected', (gameInfo) => {
-      this.log('new game injected!', gameInfo);
+      this.log(
+        '[OverlayService][registerOverlayEvents] game injected',
+        gameInfo,
+      );
+      this.emit('game-injected', gameInfo);
     });
 
     this.overlayApi.on('game-focus-changed', (window, game, focus) => {
-      this.log('game window focus changes', game.name, focus);
+      this.log(
+        '[OverlayService][registerOverlayEvents] game window focus changes',
+        game.name,
+        focus,
+      );
     });
 
     this.overlayApi.on('game-window-changed', (window, game, reason) => {
-      this.log('game window info changed', reason, window);
+      this.log(
+        '[OverlayService][registerOverlayEvents] game window info changed',
+        reason,
+        window,
+      );
     });
 
     this.overlayApi.on('game-input-interception-changed', (info) => {
-      this.log('overlay input interception changed', info);
+      this.log(
+        '[OverlayService][registerOverlayEvents] overlay input interception changed',
+        info,
+      );
+      this.emit('input-interception-changed', info);
     });
 
     this.overlayApi.on('game-input-exclusive-mode-changed', (info) => {
-      this.log('overlay input exclusive mode changed', info);
+      this.log(
+        '[OverlayService][registerOverlayEvents] overlay input exclusive mode changed',
+        info,
+      );
     });
   }
 
-  /** */
   private log(message: string, ...args: any[]) {
     try {
       this.emit('log', message, ...args);
-    } catch {}
+    } catch (error: any) {
+      this.emit('error in [OverlayService]');
+    }
   }
 }

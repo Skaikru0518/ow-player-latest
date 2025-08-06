@@ -2,7 +2,6 @@
 const config = require('./webpack.base.config');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const path = require('path');
-const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 const rendererConfig = { ...config };
 rendererConfig.target = 'electron-renderer';
@@ -10,38 +9,7 @@ rendererConfig.entry = {
   renderer: './src/renderer/renderer.ts',
   preload: './src/preload/preload.ts',
   exclusive: './src/renderer/exclusive.ts',
-  osr: './src/renderer/osr.ts',
 };
-
-// Updated output configuration to handle preload correctly
-rendererConfig.output = {
-  path: path.join(__dirname, 'dist'),
-  filename: (pathData) => {
-    switch (pathData.chunk.name) {
-      case 'exclusive':
-        return 'exclusive/[name].js';
-      case 'preload':
-        return 'preload/[name].js';
-      default:
-        return 'renderer/[name].js';
-    }
-  },
-};
-
-rendererConfig.plugins.push(
-  new CopyWebpackPlugin({
-    patterns: [
-      {
-        from: path.resolve(__dirname, 'src/renderer/app/dist'),
-        to: path.resolve(__dirname, 'dist/renderer/app/dist'),
-      },
-      {
-        from: path.resolve(__dirname, 'src/renderer/osr.css'),
-        to: path.resolve(__dirname, 'dist/renderer/osr.css'),
-      },
-    ],
-  }),
-);
 
 rendererConfig.plugins.push(
   new HtmlWebpackPlugin({
@@ -57,11 +25,7 @@ rendererConfig.plugins.push(
   new HtmlWebpackPlugin({
     template: './src/renderer/osr.html',
     filename: path.join(__dirname, './dist/renderer/osr.html'),
-    chunks: ['osr'],
     inject: false,
-    templateParameters: {
-      viteAssetsPath: 'app/dist/assets',
-    },
   }),
 );
 
@@ -74,4 +38,19 @@ rendererConfig.plugins.push(
   }),
 );
 
+rendererConfig.output = {
+  path: path.join(__dirname, './dist'),
+  filename: (pathData) => {
+    if (pathData.chunk.name === 'exclusive') {
+      return 'exclusive/[name].js';
+    }
+    if (pathData.chunk.name === 'renderer') {
+      return 'renderer/[name].js';
+    }
+    if (pathData.chunk.name === 'preload') {
+      return 'preload/[name].js';
+    }
+    return '[name].js';
+  },
+};
 module.exports = rendererConfig;
